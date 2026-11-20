@@ -1,0 +1,30 @@
+{
+  "name": "membership_allocation_client_module",
+  "version": "0.1.0",
+  "description": "RLN membership allocation client: requests a membership from an allocator over libp2p, with auth produced by pluggable auth_vector modules",
+  "author": "Logos",
+  "type": "core",
+  "interface": "cdylib",
+  "category": "blockchain",
+  "main": "membership_allocation_client_module_plugin",
+  "dependencies": ["libp2p_module"],
+  "include": [],
+  "capabilities": [],
+  "codegen": {
+    "rust": {
+      "crate": "rust-lib",
+      "trait": "MembershipAllocationClientModule"
+    }
+  },
+  "nix": {
+    "external_libraries": [],
+    "packages": {
+      "build": [],
+      "runtime": []
+    },
+    "cmake": {
+      "find_packages": [],
+      "extra_include_dirs": []
+    }
+  }
+}
