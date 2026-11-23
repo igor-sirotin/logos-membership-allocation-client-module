@@ -1,6 +1,6 @@
 {
   "name": "membership_allocation_client_module",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "RLN membership allocation client: requests a membership from an allocator over libp2p, with auth produced by pluggable auth_vector modules",
   "author": "Logos",
   "type": "core",

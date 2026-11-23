@@ -6,13 +6,19 @@ pub trait MembershipAllocationClientModule: Send + 'static {
     /// Ask an allocator to register a membership. Args
     /// `{config?, identityCommitment, rate?, authType?, authPayload?,
     ///  authProvider?, authArgs?, discover?, allocatorPeerId?,
-    ///  allocatorMultiaddr?}`.
+    ///  allocatorMultiaddr?, bootstrapPeers?}`.
     /// config names the registry (ConfigState account). Allocators
     /// advertising the (registry, authType) pair through libp2p service
     /// discovery are asked first (discover, default true; needs config and a
     /// node with discovery mounted) while none has acted on the request; the
     /// configured allocatorPeerId+allocatorMultiaddr pair, if any, comes
-    /// after them. authType names the auth vector: any type the target
+    /// after them. bootstrapPeers (`/…/p2p/<peerId>` multiaddrs) are peers
+    /// of the DHT the allocators advertise on: when libp2p_module holds no
+    /// node yet, this module creates one on them (kad and service discovery
+    /// mounted, laid over LIBP2P_MODULE_CONFIG and its own bootstrapNodes)
+    /// and starts it; a node a host created is used as it is. With no peer
+    /// from either source nothing is created, and a node that is not there
+    /// is discovery unavailable. authType names the auth vector: any type the target
     /// allocator's authVerifiers accept; this module knows no vector by
     /// name. Its payload comes from authPayload (raw hex, verbatim) or an
     /// authProvider module implementing the auth_vector producer contract
@@ -33,7 +39,8 @@ pub trait MembershipAllocationClientModule: Send + 'static {
     /// discovered name the allocator whose own reply ended the request.
     fn request(&mut self, args_json: String) -> String;
     /// The allocators currently advertising a (registry, authType) pair
-    /// through libp2p service discovery. Args `{config, authType?}`
+    /// through libp2p service discovery. Args
+    /// `{config, authType?, bootstrapPeers?}` (bootstrapPeers as in request)
     /// → `{serviceId, candidates:[{peerId, addrs}], joined, peers}`:
     /// candidates is empty when none is placed yet or this node joined no
     /// peer within 20 s (`joined` false); `peers` is its outbound peer count.

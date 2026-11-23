@@ -16,11 +16,18 @@ machine. The allocator side is
   vector by name. A failure carries a `kind` to branch on.
 - `discover(args_json)`: the allocators currently advertising a (registry, auth type) pair.
 
+Both take `bootstrapPeers`, multiaddrs of peers on the DHT the allocators advertise on. When
+`libp2p_module` holds no node yet, the module creates one on those peers, with kad and service
+discovery mounted over `LIBP2P_MODULE_CONFIG`, and starts it. A node a host created first is used
+as it is: libp2p takes bootstrap peers only when a node is created, so a host that wants its own
+libp2p configuration creates the node before anything asks this module.
+
 The argument and reply shapes are documented on the trait in `rust-lib/src/lib.rs`.
 
 ## Dependencies
 
-- `libp2p_module` (declared; loaded first by the host).
+- `libp2p_module` (declared; loaded first by the host). The host need not create or start its
+  node.
 - An auth producer module, when `authProvider` names one. It is opened on first use.
 - Shared crates, pinned by commit: `membership_allocation_action`, `paymaster_client`,
   `paymaster_lp` and `paymaster_wire` from `logos-membership-allocation-crates`.
