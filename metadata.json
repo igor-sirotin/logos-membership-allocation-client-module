@@ -1,13 +1,13 @@
 {
   "name": "membership_allocation_client_module",
-  "version": "0.1.0",
-  "description": "RLN membership allocation client: requests a membership from an allocator over libp2p, with auth produced by pluggable auth_vector modules",
+  "version": "0.3.0",
+  "description": "RLN membership allocation client: requests a membership from an allocator over a libp2p node of its own, with auth produced by pluggable auth_vector modules",
   "author": "Logos",
   "type": "core",
   "interface": "cdylib",
   "category": "blockchain",
   "main": "membership_allocation_client_module_plugin",
-  "dependencies": ["libp2p_module"],
+  "dependencies": [],
   "include": [],
   "capabilities": [],
   "codegen": {
@@ -17,14 +17,24 @@
     }
   },
   "nix": {
-    "external_libraries": [],
+    "external_libraries": [
+      {
+        "name": "libp2p",
+        "vendor_path": "lib"
+      }
+    ],
     "packages": {
       "build": [],
-      "runtime": []
+      "runtime": [
+        "nlohmann_json",
+        "tinycbor"
+      ]
     },
     "cmake": {
       "find_packages": [],
-      "extra_include_dirs": []
+      "extra_include_dirs": [
+        "lib"
+      ]
     }
   }
 }

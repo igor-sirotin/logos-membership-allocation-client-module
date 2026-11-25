@@ -1,5 +1,5 @@
 {
-  description = "Logos module: RLN membership allocation client over libp2p";
+  description = "Logos module: RLN membership allocation client over a libp2p node of its own";
 
   inputs = {
     logos-module-builder.url = "github:logos-co/logos-module-builder/0.3.1";
@@ -10,20 +10,57 @@
     let
       nixpkgs = logos-module-builder.inputs.nixpkgs;
       meta = builtins.fromJSON (builtins.readFile ./metadata.json);
+      devSystems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
+      libp2pInputs = {
+        packages = nixpkgs.lib.genAttrs devSystems (system: {
+          cbind = libp2p_module.inputs.libp2p.packages.${system}.cbind.overrideAttrs (old: {
+            buildPhase = builtins.replaceStrings
+              [ "--threads:on --opt:size --noMain --mm:refc --d:metrics" ]
+              [ "--threads:on --opt:size --noMain --mm:refc --d:metrics -d:chronicles_runtime_filtering=on" ]
+              old.buildPhase;
+          });
+        });
+      };
       module = logos-module-builder.lib.mkLogosModule {
         src = ./.;
         configFile = ./metadata.json;
         flakeInputs = inputs;
+        inherit externalLibInputs;
       };
-      devSystems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
+      externalLibInputs = {
+        libp2p = {
+          input = libp2pInputs;
+          packages.default = "cbind";
+        };
+      };
+      nodeTests = nixpkgs.lib.genAttrs devSystems (system:
+        let
+          pkgs = import nixpkgs { inherit system; };
+          withContract = pkgs.runCommand "${meta.name}-src-with-contract" { } ''
+            cp -R --no-preserve=mode,ownership ${./.} $out
+            mkdir -p $out/generated_code
+            cp ${module.packages.${system}.lidl}/${meta.name}.lidl $out/generated_code/${meta.name}.lidl
+          '';
+        in
+        (logos-module-builder.lib.mkLogosModuleTests {
+          src = withContract;
+          configFile = ./metadata.json;
+          flakeInputs = inputs;
+          inherit externalLibInputs;
+          testDir = ./node-tests;
+          extraCmakeFlags = [ "-DLIBP2P_MODULE_SRC=${libp2p_module}" ];
+        }).${system}.unit-tests);
     in
     module // {
+      packages = nixpkgs.lib.genAttrs devSystems (system:
+        (module.packages.${system} or { }) // { node-tests = nodeTests.${system}; });
+      checks = nixpkgs.lib.genAttrs devSystems (system:
+        (module.checks.${system} or { }) // { node-tests = nodeTests.${system}; });
       apps = nixpkgs.lib.genAttrs devSystems (system:
         let
           pkgs = import nixpkgs { inherit system; };
           lidlGen = logos-module-builder.inputs.logos-rust-sdk.packages.${system}.lidl-gen;
           sdkSrc = logos-module-builder.packages.${system}.rust-sdk-src;
-          libp2pLidl = "${libp2p_module.packages.${system}.lidl}/libp2p_module.lidl";
           protocolVersion =
             let
               header = builtins.readFile
@@ -45,7 +82,6 @@
                 --trait MembershipAllocationClientModule --module-name ${meta.name} --module-version ${meta.version} \
                 -o "$gen/${meta.name}.lidl"
               logos-lidl-gen "$gen/${meta.name}.lidl" --provider --no-trait \
-                --dep libp2p_module=${libp2pLidl} \
                 --protocol-version ${protocolVersion} \
                 -o "$gen/provider_gen.rs"
               echo "staging the SDK source at logos-rust-sdk-src/ ..."

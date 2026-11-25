@@ -5,7 +5,7 @@ version = 4
 [[package]]
 name = "auth_vector"
 version = "0.3.1"
-source = "git+https://github.com/logos-co/logos-membership-allocation-crates?rev=a91fb8af6bcaf1030672a2476600fca95c97bb39#a91fb8af6bcaf1030672a2476600fca95c97bb39"
+source = "git+https://github.com/logos-co/logos-membership-allocation-crates?rev=69ed05c056594ab8fa747cb8bfd697b014dfa9f2#69ed05c056594ab8fa747cb8bfd697b014dfa9f2"
 dependencies = [
  "hex",
  "serde",
@@ -108,14 +108,14 @@ dependencies = [
 [[package]]
 name = "membership_allocation_action"
 version = "0.1.0"
-source = "git+https://github.com/logos-co/logos-membership-allocation-crates?rev=a91fb8af6bcaf1030672a2476600fca95c97bb39#a91fb8af6bcaf1030672a2476600fca95c97bb39"
+source = "git+https://github.com/logos-co/logos-membership-allocation-crates?rev=69ed05c056594ab8fa747cb8bfd697b014dfa9f2#69ed05c056594ab8fa747cb8bfd697b014dfa9f2"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "membership_allocation_client_module"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "auth_vector",
  "hex",
@@ -136,7 +136,7 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 [[package]]
 name = "paymaster_client"
 version = "0.1.0"
-source = "git+https://github.com/logos-co/logos-membership-allocation-crates?rev=a91fb8af6bcaf1030672a2476600fca95c97bb39#a91fb8af6bcaf1030672a2476600fca95c97bb39"
+source = "git+https://github.com/logos-co/logos-membership-allocation-crates?rev=69ed05c056594ab8fa747cb8bfd697b014dfa9f2#69ed05c056594ab8fa747cb8bfd697b014dfa9f2"
 dependencies = [
  "auth_vector",
  "hex",
@@ -148,7 +148,7 @@ dependencies = [
 [[package]]
 name = "paymaster_lp"
 version = "0.1.0"
-source = "git+https://github.com/logos-co/logos-membership-allocation-crates?rev=a91fb8af6bcaf1030672a2476600fca95c97bb39#a91fb8af6bcaf1030672a2476600fca95c97bb39"
+source = "git+https://github.com/logos-co/logos-membership-allocation-crates?rev=69ed05c056594ab8fa747cb8bfd697b014dfa9f2#69ed05c056594ab8fa747cb8bfd697b014dfa9f2"
 dependencies = [
  "base64",
  "serde_json",
@@ -157,7 +157,7 @@ dependencies = [
 [[package]]
 name = "paymaster_wire"
 version = "0.1.0"
-source = "git+https://github.com/logos-co/logos-membership-allocation-crates?rev=a91fb8af6bcaf1030672a2476600fca95c97bb39#a91fb8af6bcaf1030672a2476600fca95c97bb39"
+source = "git+https://github.com/logos-co/logos-membership-allocation-crates?rev=69ed05c056594ab8fa747cb8bfd697b014dfa9f2#69ed05c056594ab8fa747cb8bfd697b014dfa9f2"
 dependencies = [
  "base58",
  "base64",

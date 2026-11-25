@@ -10,4 +10,17 @@ endif()
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/metadata.json
                ${CMAKE_CURRENT_BINARY_DIR}/metadata.json COPYONLY)
 
-logos_module(NAME membership_allocation_client_module)
+find_package(nlohmann_json REQUIRED)
+
+logos_module(
+    NAME membership_allocation_client_module
+    SOURCES
+        src/own_node.h
+        src/own_node.cpp
+    EXTERNAL_LIBS
+        libp2p
+    LINK_LIBRARIES
+        tinycbor
+)
+
+target_link_libraries(membership_allocation_client_module_module_plugin PUBLIC nlohmann_json::nlohmann_json)
