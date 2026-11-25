@@ -6,7 +6,10 @@ use paymaster_wire::canonical_account;
 use paymaster_wire::envelope::SponsorRequest;
 use serde_json::{json, Value};
 
+use crate::lp;
+
 const PEER_KEY: &str = "allocatorPeerId";
+const PEER_INFO_TIMEOUT_MS: i32 = 10_000;
 
 struct Membership<'a> {
     commitment_hex: &'a str,
@@ -55,6 +58,23 @@ fn text<'a>(args: &'a Value, key: &str) -> Option<&'a str> {
         .filter(|s| !s.is_empty())
 }
 
+fn bootstrap_peers(args: &Value) -> Result<Vec<String>, Value> {
+    match args.get("bootstrapPeers") {
+        None | Some(Value::Null) => Ok(Vec::new()),
+        Some(Value::Array(peers)) => peers
+            .iter()
+            .map(|peer| {
+                peer.as_str()
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_owned)
+                    .ok_or_else(|| invalid("bootstrapPeers must be multiaddr strings"))
+            })
+            .collect(),
+        Some(_) => Err(invalid("bootstrapPeers must be an array")),
+    }
+}
+
 pub fn discover(args_json: &str) -> Result<Value, Value> {
     let a: Value =
         serde_json::from_str(args_json).map_err(|e| invalid(format!("discover args: {e}")))?;
@@ -62,7 +82,19 @@ pub fn discover(args_json: &str) -> Result<Value, Value> {
         text(&a, "config").ok_or_else(|| invalid("discover needs config (the registry)"))?;
     let registry = canonical_account(registry).map_err(|e| invalid(format!("config: {e}")))?;
     let auth_type = a.get("authType").and_then(Value::as_str).unwrap_or("");
-    engine::discover::<Membership<'_>>(&registry, auth_type).map_err(|e| failed("no_provider", e))
+    let peers = bootstrap_peers(&a)?;
+    engine::discover::<Membership<'_>>(&registry, auth_type, &peers)
+        .map_err(|e| failed("no_provider", e))
+}
+
+pub fn peer_id() -> Result<Value, Value> {
+    engine::bring_node_up(&[]).map_err(|e| failed("failed", e))?;
+    let info = lp::call_node("peerInfo", &json!([]), PEER_INFO_TIMEOUT_MS)
+        .map_err(|e| failed("failed", e))?;
+    match info.get("peerId").and_then(Value::as_str) {
+        Some(peer_id) if !peer_id.is_empty() => Ok(json!({ "peerId": peer_id })),
+        _ => Err(failed("failed", "peerInfo carried no peerId")),
+    }
 }
 
 pub fn request(args_json: &str) -> Result<Value, Value> {
@@ -87,6 +119,7 @@ pub fn request(args_json: &str) -> Result<Value, Value> {
             "request needs discover or allocatorPeerId+allocatorMultiaddr",
         ));
     }
+    let peers = bootstrap_peers(&a)?;
     let registry = match text(&a, "config") {
         Some(c) => Some(canonical_account(c).map_err(|e| invalid(format!("config: {e}")))?),
         None => None,
@@ -133,6 +166,7 @@ pub fn request(args_json: &str) -> Result<Value, Value> {
         discover,
         configured,
         spread: commitment_bytes[0] as usize,
+        bootstrap_peers: &peers,
     };
     engine::request(
         &Membership {
@@ -151,7 +185,7 @@ mod tests {
     use paymaster_wire::service_data;
 
     use super::*;
-    use crate::lp::{self, b64};
+    use crate::lp::b64;
 
     fn canonical() -> String {
         format!("{}0a", "ab".repeat(31))
@@ -179,8 +213,14 @@ mod tests {
         a.to_string()
     }
 
+    const PEER: &str = "/dns4/a.example/tcp/30303/p2p/PeerA";
+
     fn discovering(extra: &Value) -> String {
-        let mut a = json!({ "identityCommitment": canonical(), "config": registry() });
+        let mut a = json!({
+            "identityCommitment": canonical(),
+            "config": registry(),
+            "bootstrapPeers": [PEER],
+        });
         for (k, v) in extra.as_object().into_iter().flatten() {
             a[k] = v.clone();
         }
@@ -191,6 +231,7 @@ mod tests {
 
     fn scripted(peers: usize, records: Value, answer: Answer) {
         lp::fake::install(Box::new(move |_, method, a| match method {
+            "createNode" | "start" => Ok(json!(true)),
             "discoRegisterInterest" => Ok(json!(true)),
             "connectedPeers" => Ok(json!((0..peers)
                 .map(|i| format!("P{i}"))
@@ -315,6 +356,14 @@ mod tests {
                 "discovery needs config",
             ),
             (json!({ "discover": "no" }), "discover must be a boolean"),
+            (
+                json!({ "bootstrapPeers": "/ip4/10.0.0.2/tcp/1/p2p/P" }),
+                "bootstrapPeers must be an array",
+            ),
+            (
+                json!({ "bootstrapPeers": ["/ip4/10.0.0.2/tcp/1/p2p/P", 7] }),
+                "bootstrapPeers must be multiaddr strings",
+            ),
             (
                 json!({ "authType": "t", "authPayload": "aa", "authProvider": "m" }),
                 "mutually exclusive",
@@ -453,10 +502,80 @@ mod tests {
     }
 
     #[test]
+    fn the_peer_id_is_read_from_a_node_brought_up_without_peers() {
+        lp::fake::install(Box::new(|_, method, _| match method {
+            "createNode" | "start" => Ok(json!(true)),
+            "peerInfo" => Ok(json!({ "peerId": "16Uiu2Own", "addrs": ["/ip4/127.0.0.1/tcp/5"] })),
+            m => Err(format!("unscripted {m}")),
+        }));
+        assert_eq!(peer_id().unwrap(), json!({ "peerId": "16Uiu2Own" }));
+        assert_eq!(lp::fake::methods(), ["createNode", "start", "peerInfo"]);
+        let config: Value =
+            serde_json::from_str(lp::fake::calls()[0].1[0].as_str().unwrap()).unwrap();
+        assert_eq!(config, json!({ "bootstrapNodes": [] }));
+
+        lp::fake::install(Box::new(|_, m, _| Err(format!("{m}: no node"))));
+        assert_eq!(
+            peer_id().unwrap_err(),
+            json!({ "kind": "failed", "error": "createNode: no node" })
+        );
+        lp::fake::clear();
+    }
+
+    #[test]
+    fn bootstrap_peers_bring_the_node_up_before_discovery() {
+        let peers = json!(["/dns4/a.example/tcp/30303/p2p/PeerA"]);
+        lp::fake::install(Box::new(move |_, method, _| match method {
+            "createNode" | "start" | "discoRegisterInterest" => Ok(json!(true)),
+            "connectedPeers" => Ok(json!(["P0"])),
+            "discoLookup" => Ok(advertising("A", "peer-any")),
+            m => Err(format!("unscripted {m}")),
+        }));
+        let found = discover(
+            &json!({ "config": registry(), "authType": "peer-any", "bootstrapPeers": peers })
+                .to_string(),
+        )
+        .unwrap();
+        assert_eq!(found["candidates"][0]["peerId"], "A");
+        let calls = lp::fake::calls();
+        assert_eq!(
+            lp::fake::methods()[..3],
+            ["createNode", "start", "discoRegisterInterest"]
+        );
+        let config: Value = serde_json::from_str(calls[0].1[0].as_str().unwrap()).unwrap();
+        assert_eq!(
+            config["bootstrapNodes"],
+            json!([{ "peerId": "PeerA", "addrs": ["/dns4/a.example/tcp/30303"] }])
+        );
+        assert_eq!(config.as_object().unwrap().len(), 1);
+
+        lp::fake::install(Box::new(|_, method, _| match method {
+            "createNode" => Err("createNode: node already created".into()),
+            "start" | "discoRegisterInterest" => Ok(json!(true)),
+            "connectedPeers" => Ok(json!([])),
+            m => Err(format!("unscripted {m}")),
+        }));
+        let f = request(&discovering(&json!({ "bootstrapPeers": peers }))).unwrap_err();
+        assert_eq!(f["kind"], "no_provider", "{f}");
+        assert_eq!(f["discovery"], "not_joined");
+        assert_eq!(lp::fake::methods()[..2], ["createNode", "start"]);
+
+        lp::fake::install(Box::new(|_, m, _| Err(format!("unscripted {m}"))));
+        let f = request(&discovering(&json!({ "bootstrapPeers": [] }))).unwrap_err();
+        assert_eq!(f["discovery"], "unavailable");
+        assert!(lp::fake::methods().is_empty());
+        lp::fake::clear();
+    }
+
+    #[test]
     fn discover_lists_the_allocators_advertising_the_pair() {
         scripted(1, advertising("A", "peer-any"), granting);
         assert_eq!(
-            discover(&json!({ "config": registry(), "authType": "peer-any" }).to_string()).unwrap(),
+            discover(
+                &json!({ "config": registry(), "authType": "peer-any", "bootstrapPeers": [PEER] })
+                    .to_string()
+            )
+            .unwrap(),
             json!({
                 "serviceId": CODEC,
                 "candidates": [{ "peerId": "A", "addrs": ["/ip4/127.0.0.1/tcp/1"] }],
@@ -465,7 +584,8 @@ mod tests {
             })
         );
         assert_eq!(
-            discover(&json!({ "config": registry() }).to_string()).unwrap()["candidates"],
+            discover(&json!({ "config": registry(), "bootstrapPeers": [PEER] }).to_string())
+                .unwrap()["candidates"],
             json!([])
         );
         lp::fake::clear();
